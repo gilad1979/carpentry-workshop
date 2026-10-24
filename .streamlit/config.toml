@@ -1,0 +1,12 @@
+[theme]
+base = "light"
+primaryColor = "#6B3F1F"
+backgroundColor = "#FBF4E8"
+secondaryBackgroundColor = "#F3E6CF"
+textColor = "#2B2622"
+borderColor = "#DCCBAE"
+font = "'IBM Plex Sans Hebrew':https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;600&display=swap"
+headingFont = "'Secular One':https://fonts.googleapis.com/css2?family=Secular+One&display=swap"
+
+[client]
+toolbarMode = "minimal"

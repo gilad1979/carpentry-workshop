@@ -78,3 +78,45 @@ def build(W, H, D, t, cols, items):
             boxes.append(box(f"ידית (שורה {row})", "handle",
                              mid_x - 6, mid_x + 6, -2.5, 0, mid_z - 0.6, mid_z + 0.6))
     return boxes, errors
+
+
+def _num(v):
+    """מספר סופי (לא bool, לא NaN/אינסוף) או None. אירועים מהדפדפן הם קלט לא מהימן."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v in (float("inf"), float("-inf")):
+        return None
+    return float(v)
+
+
+def clamp_move(kind, z, h, t, H, cols, col):
+    """מתקן יעד גרירה: מחזיר (עמודה, גובה) בתוך הארון, גובה מעוגל ל-0.5; None לקלט לא תקין."""
+    z, col = _num(z), _num(col)
+    h = t if kind == "מדף" else _num(h)
+    if z is None or col is None or h is None:
+        return None
+    lo, hi = t, max(t, H - t - h)
+    return min(max(round(col), 1), cols), min(max(round(z * 2) / 2, lo), hi)
+
+
+def apply_event(rows, kind, payload, t, H, cols):
+    """מחיל אירוע move/delete מהדפדפן על רשימת שורות (סוג, עמודה, גובה, גובה_מגירה).
+
+    מחזיר רשימה חדשה, או None אם האירוע לא תקין.
+    """
+    if not isinstance(payload, dict):
+        return None
+    idx = payload.get("index")
+    if isinstance(idx, float) and idx.is_integer():
+        idx = int(idx)
+    if isinstance(idx, bool) or not isinstance(idx, int) or not 0 <= idx < len(rows):
+        return None
+    rows = [tuple(r) for r in rows]
+    if kind == "delete":
+        return rows[:idx] + rows[idx + 1:]
+    if kind == "move":
+        item_kind, _, _, h = rows[idx]
+        moved = clamp_move(item_kind, payload.get("z"), h, t, H, cols, payload.get("col"))
+        if moved is None:
+            return None
+        rows[idx] = (item_kind, moved[0], moved[1], h)
+        return rows
+    return None

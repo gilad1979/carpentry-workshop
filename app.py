@@ -1,13 +1,18 @@
+from pathlib import Path
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from cabinet import build, first_free_z
+from cabinet import apply_event, build, first_free_z
+from front_view import front_view
 
 COLORS = {"body": "#c8a165", "back": "#e3cfa6", "shelf": "#b8894a", "drawer": "#a0703a", "handle": "#444444"}
 COLOR_LABELS = {"body": "גוף הארון", "back": "גב", "shelf": "מדפים", "drawer": "חזיתות מגירות", "handle": "ידיות"}
 DEFAULT_ITEMS = pd.DataFrame({"סוג": ["מדף", "מדף", "מגירה", "מגירה"], "עמודה": [1, 1, 2, 2],
                               "גובה מהרצפה": [70.0, 140.0, 1.8, 26.0], "גובה מגירה": [None, None, 24.0, 24.0]})
+PAPER = "#FBF4E8"  # רקע "נייר", כמו הרקע של הלוגו
+ASSETS = Path(__file__).parent / "assets"
 # קודקודי קופסה: 0-3 תחתית, 4-7 עליון; 12 משולשים; 12 צלעות
 TRI = [(0, 1, 2), (0, 2, 3), (4, 5, 6), (4, 6, 7), (0, 1, 5), (0, 5, 4),
        (3, 2, 6), (3, 6, 7), (0, 3, 7), (0, 7, 4), (1, 2, 6), (1, 6, 5)]
@@ -46,18 +51,26 @@ def figure(boxes, colors):
     fig.add_trace(go.Scatter3d(x=ex, y=ey, z=ez, mode="lines", line=dict(color="#3b2a17", width=2),
                                hoverinfo="skip", showlegend=False))
     fig.update_layout(
-        height=700, margin=dict(l=0, r=0, t=0, b=0), uirevision="keep",  # שומר זווית סיבוב בין עדכונים
-        scene=dict(aspectmode="data", xaxis_title="רוחב", yaxis_title="עומק", zaxis_title="גובה",
+        height=640, paper_bgcolor=PAPER, margin=dict(l=0, r=0, t=0, b=0), uirevision="keep",  # שומר זווית סיבוב בין עדכונים
+        scene=dict(aspectmode="data", bgcolor=PAPER, xaxis_title="רוחב", yaxis_title="עומק", zaxis_title="גובה",
                    camera=dict(eye=dict(x=1.3, y=-2.3, z=1.0))),  # מבט מהחזית (y=0)
     )
     return fig
 
 
-st.set_page_config(page_title="מעצב ארונות", layout="wide")
-st.title("מעצב ארונות")
+st.set_page_config(page_title="הנגריה", page_icon=str(ASSETS / "icon.png"), layout="wide")
+st.logo(str(ASSETS / "icon.png"), icon_image=str(ASSETS / "icon.png"), size="large")
+# CSS קבוע בלבד (בלי נתוני משתמש): התוכן מימין לשמאל. לא מגדירים rtl על .stApp או על stSidebar עצמו,
+# כי זה שובר את קיפול הסרגל הצדי בנייד. גרף התלת-ממד והטבלה נשארים משמאל לימין.
+st.markdown(
+    "<style>[data-testid='stMain'], [data-testid='stSidebarContent'] {direction: rtl;}"
+    " .stPlotlyChart, [data-testid='stDataFrame'] {direction: ltr;}</style>",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
-    st.header("מידות (ס\"מ)")
+    st.image(str(ASSETS / "logo.png"), width=220)
+    st.header("מידות הארון (ס\"מ)")
     W = st.number_input("רוחב", 30.0, 400.0, 100.0, 1.0)
     H = st.number_input("גובה", 30.0, 300.0, 200.0, 1.0)
     D = st.number_input("עומק", 20.0, 100.0, 60.0, 1.0)
@@ -67,11 +80,16 @@ with st.sidebar:
 if "items_df" not in st.session_state:
     st.session_state.items_df = DEFAULT_ITEMS
 
-left, right = st.columns([1, 1.1])
-with left:
-    st.subheader("מדפים ומגירות")
-    st.caption("גובה מהרצפה = תחתית הרכיב. אפשר לשנות כל תא. למחיקה: לסמן שורה בעמודה השמאלית ולמחוק. "
-               "להוספה נוחה: \"הוספת מדף או מגירה\" בצד.")
+# המיכלים נוצרים לפי סדר התצוגה; התוכן ממולא אחרי שהטבלה (בתוך ה-expander) נקראה
+st.title("תכנון הארון")
+st.caption("גוררים מדפים ומגירות בחזית. החצים במקלדת מזיזים בחצי ס\"מ.")
+hint = st.container()
+front_col, view3d_col = st.columns([1, 1.1])
+warnings = st.container()
+table = st.expander("עריכה מדויקת בטבלה")
+
+with table:
+    st.caption("גובה מהרצפה = תחתית הרכיב. אפשר לשנות כל תא. למחיקה: לסמן שורה בעמודה השמאלית ולמחוק.")
     items = st.data_editor(
         st.session_state.items_df, key="items", num_rows="dynamic", width="stretch",
         column_config={  # ברירות מחדל כדי ששורה חדשה לא תתחיל ריקה
@@ -82,10 +100,8 @@ with left:
                                                         help="רק למגירות"),
         },
     )
-    rows = list(items.itertuples(index=False))
-    boxes, errors = build(W, H, D, t, int(cols), rows)
-    for e in errors:
-        st.warning(e)
+rows = list(items.itertuples(index=False))
+boxes, errors = build(W, H, D, t, int(cols), rows)
 
 with st.sidebar:
     st.header("הוספת מדף או מגירה")
@@ -105,8 +121,25 @@ with st.sidebar:
         st.session_state.pop("items", None)  # העריכות כבר בתוך items_df; מאפס את מצב הטבלה
         st.rerun()
 
-    st.header("צבעים")
-    colors = {k: st.color_picker(COLOR_LABELS[k], v) for k, v in COLORS.items()}
+    with st.expander("צבעים"):
+        colors = {k: st.color_picker(COLOR_LABELS[k], v) for k, v in COLORS.items()}
 
-with right:
+if not rows:
+    hint.info("הארון ריק. אפשר להוסיף מדף או מגירה מהסרגל הצדי.")
+with warnings:
+    for e in errors:
+        st.warning(e)
+with view3d_col:
     st.plotly_chart(figure(boxes, colors), width="stretch")
+with front_col:
+    event = front_view(W, H, t, int(cols), rows, colors)
+
+if event:  # אירוע מהדפדפן (גרירה/מחיקה): apply_event מאמת, ואם לא תקין מתעלמים ממנו
+    new_rows = apply_event(rows, event[0], event[1], t, H, int(cols))
+    if new_rows is not None:
+        df = pd.DataFrame(new_rows, columns=list(DEFAULT_ITEMS.columns))
+        for name in df.columns[1:]:
+            df[name] = pd.to_numeric(df[name], errors="coerce")
+        st.session_state.items_df = df
+        st.session_state.pop("items", None)  # כמו בכפתור "הוסף": מאפס את מצב הטבלה
+        st.rerun()

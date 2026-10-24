@@ -18,12 +18,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A course exercise (not a real business tool): a Hebrew Streamlit app for designing a carpentry cabinet.
-You set the cabinet size and number of columns, add shelves and drawers, pick colors, and see it in 3D (Plotly `Mesh3d`).
+A course exercise (not a real business tool): a Hebrew, right-to-left Streamlit app ("הנגריה") for designing a carpentry cabinet.
+You set the cabinet size and number of columns, add shelves and drawers, pick colors, drag items in a 2D front view, and see the cabinet in 3D (Plotly `Mesh3d`).
 
-- `cabinet.py`: pure geometry. `build()` turns sizes + items into boxes (cm) and validation errors; `first_free_z()` finds the lowest free spot in a column. Axes: x = width, y = depth (0 = front), z = height (0 = floor).
-- `app.py`: the Streamlit UI. Items live in `st.session_state.items_df`; the sidebar "add" button appends a row and resets the `data_editor` state (`items` key).
-- `test_cabinet.py`: assert-based tests, prints `OK`.
+- `cabinet.py`: pure geometry and event logic. `build()` turns sizes + items into boxes (cm) and validation errors; `first_free_z()` finds the lowest free spot in a column; `clamp_move()` and `apply_event()` validate and apply move/delete events coming from the browser (untrusted input). Axes: x = width, y = depth (0 = front), z = height (0 = floor).
+- `app.py`: the Streamlit UI. Items live in `st.session_state.items_df`; the sidebar "add" button and front-view events rebuild that DataFrame and reset the `data_editor` state (`items` key). The precise-edit table sits in an expander; layout containers are created first and filled after the table is read.
+- `front_view.py` + `front_view.js` + `front_view.css`: the draggable front view, a `st.components.v2` component (isolated styles, JS is re-run on the same element when data changes, so it rebuilds the DOM and uses `onX` properties). It sends `move`/`delete` triggers. The files are read at import, so restart the server after editing them.
+- `.streamlit/config.toml`: warm light theme and Google Fonts (Secular One, IBM Plex Sans Hebrew). `assets/`: logo and icon.
+- `test_cabinet.py`: assert-based tests of `cabinet.py`, prints `OK`. `test_app.py`: AppTest smoke test (app loads, "add" button adds a row), prints `OK`.
 
 ## Running
 
@@ -37,8 +39,11 @@ Opens at http://localhost:8501. `.claude/launch.json` has the same command for t
 
 ## Checking the app
 
-1. `.venv/Scripts/python test_cabinet.py` prints `OK`.
-2. Run the app and check in the browser: the 3D cabinet renders, no warnings with the default items, the sidebar "➕ הוסף" button stacks drawers in a column, and a color change updates the 3D view.
+1. `.venv/Scripts/python test_cabinet.py` and `.venv/Scripts/python test_app.py` both print `OK`.
+2. Run the app and check in the browser: the logo shows, the layout is right-to-left, the front view and the 3D cabinet render, no warnings with the default items.
+3. Drag a drawer in the front view up and to the other column: the 3D view and the table update. Arrow keys move the focused item, Delete removes it, and dropping onto another item shows a red outline plus a warning. The sidebar "➕ הוסף" button and a color change still work.
+
+AppTest cannot fire the component's triggers, so event handling is tested through `apply_event` directly.
 
 Gotchas:
 - Streamlit reloads `app.py` on change but keeps an old `cabinet.py` in memory. After editing `cabinet.py`, restart the server.
